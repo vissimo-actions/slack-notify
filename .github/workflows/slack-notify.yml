@@ -1,0 +1,52 @@
+name: Reusable workflow to send slack notifications
+
+on:
+  workflow_call:
+    # inputs:
+    #   repository_name:
+    #     required: true
+    #     type: string
+    #   current_tag: 
+    #     required: true
+    #     type: string
+    #   last_tag:
+    #     required: true
+    #     type: string
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: true
+
+jobs:
+  slack-message:
+    runs-on: ubuntu-latest
+    steps: 
+
+      - uses: actions/checkout@v3
+        with:
+            fetch-depth: 0      
+
+      - name: Current Release
+        # env:
+        #   REPOSITORY_NAME: ${{ inputs.repository_name }}      
+        run: |
+          echo "CURRENT_TAG=$(git tag | sort -V | tail -1)" >> $GITHUB_ENV
+          echo "LAST_TAG=$(git tag --sort=-creatordate | grep 'v' | head -2 | awk '{split($0, tags, "\n")} END {print tags[1]}')" >> $GITHUB_ENV
+          echo "REPO_NAME=${{ github.event.repository.name }}" >> $GITHUB_ENV
+
+      - name: Current Log
+        run: |
+          if [ $CURRENT_TAG != $LAST ]; then
+            LOG=$(git log $LAST...$CURRENT --pretty=format:'%s - By %an' --no-merges | tr '"' "'")
+          else
+            LOG=$(git log --pretty=format:'%s - By %an' --no-merges | tr '"' "'")
+          fi
+          echo "LOGS<<EOF" >> $GITHUB_ENV
+          echo "$LOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+        env:
+          CURRENT: ${{ env.CURRENT_TAG }}
+          LAST: ${{ env.LAST_TAG }}
+
+      - name: Text Message
+        run: |
+          curl -X POST -H 'Content-type: application/json' --data '{"text":"Versão `${{ env.CURRENT_TAG }}` gerada para a aplicação *${{ env.REPO_NAME }}*! :mega: \nDiferenças em relação a `${{ env.LAST_TAG }}`:\n```${{ env.LOGS }}```"}' ${{ secrets.SLACK_WEBHOOK_URL }}
